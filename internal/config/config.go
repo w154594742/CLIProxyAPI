@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -396,6 +397,10 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 		}
 	}
 
+	// 应用环境变量覆盖 (优先级高于 config.yaml)
+	// 这必须在所有配置处理之后执行,确保环境变量具有最高优先级
+	applyEnvOverrides(&cfg)
+
 	// Return the populated configuration struct.
 	return &cfg, nil
 }
@@ -575,6 +580,163 @@ func hashSecret(secret string) (string, error) {
 		return "", err
 	}
 	return string(hashedBytes), nil
+}
+
+// applyEnvOverrides 应用环境变量覆盖到配置
+// 采用分层策略:
+//   - 敏感配置 (安全相关): 环境变量始终优先,防止被页面修改覆盖
+//   - 运行时配置 (可调整): 仅当配置文件中为空/默认值时使用环境变量,允许页面修改持久化
+// 支持的环境变量列表详见 .env.example 文件
+func applyEnvOverrides(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+
+	// ========================================================================
+	// 第一类: 敏感配置 - 环境变量始终优先 (强制覆盖)
+	// 这些配置涉及安全性,不应通过 Web 管理界面修改
+	// ========================================================================
+
+	// 服务器网络绑定配置 (安全边界)
+	if v := os.Getenv("SERVER_HOST"); v != "" {
+		cfg.Host = v
+	}
+	if v := os.Getenv("SERVER_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil && port > 0 && port <= 65535 {
+			cfg.Port = port
+		}
+	}
+
+	// TLS/HTTPS 配置 (传输层安全)
+	if v := os.Getenv("TLS_ENABLE"); v != "" {
+		cfg.TLS.Enable = parseBool(v)
+	}
+	if v := os.Getenv("TLS_CERT_FILE"); v != "" {
+		cfg.TLS.Cert = v
+	}
+	if v := os.Getenv("TLS_KEY_FILE"); v != "" {
+		cfg.TLS.Key = v
+	}
+
+	// 管理 API 安全配置 (访问控制)
+	if v := os.Getenv("MANAGEMENT_ALLOW_REMOTE"); v != "" {
+		cfg.RemoteManagement.AllowRemote = parseBool(v)
+	}
+	if v := os.Getenv("MANAGEMENT_SECRET_KEY"); v != "" {
+		// 管理密钥始终从环境变量读取,防止被页面修改
+		if !looksLikeBcrypt(v) {
+			// 明文密码,哈希处理
+			if hashed, err := hashSecret(v); err == nil {
+				cfg.RemoteManagement.SecretKey = hashed
+			}
+		} else {
+			// 已哈希,直接使用
+			cfg.RemoteManagement.SecretKey = v
+		}
+	}
+	if v := os.Getenv("MANAGEMENT_DISABLE_PANEL"); v != "" {
+		cfg.RemoteManagement.DisableControlPanel = parseBool(v)
+	}
+
+	// 认证文件路径 (存储安全)
+	if v := os.Getenv("AUTH_DIR"); v != "" {
+		cfg.AuthDir = v
+	}
+
+	// WebSocket 认证要求 (API 安全)
+	if v := os.Getenv("WS_AUTH"); v != "" {
+		cfg.WebsocketAuth = parseBool(v)
+	}
+
+	// ========================================================================
+	// 第二类: 运行时可调整配置 - 仅初始化时使用环境变量
+	// 这些配置允许通过 Web 管理界面修改,环境变量仅在配置为空时生效
+	// ========================================================================
+
+	// 调试与日志配置 (运行时可调整)
+	if v := os.Getenv("DEBUG"); v != "" {
+		// 仅当配置文件未明确设置时使用环境变量
+		// 注意: bool 类型的"未设置"判断比较困难,这里采用始终覆盖的策略
+		// 如果需要更精细控制,可以使用 *bool 类型
+		cfg.Debug = parseBool(v)
+	}
+	if v := os.Getenv("LOGGING_TO_FILE"); v != "" {
+		cfg.LoggingToFile = parseBool(v)
+	}
+	if v := os.Getenv("USAGE_STATISTICS_ENABLED"); v != "" {
+		cfg.UsageStatisticsEnabled = parseBool(v)
+	}
+
+	// 网络配置 (运行时可调整)
+	if v := os.Getenv("PROXY_URL"); v != "" {
+		// 仅当配置文件中代理为空时使用环境变量
+		if cfg.ProxyURL == "" {
+			cfg.ProxyURL = v
+		}
+	}
+	if v := os.Getenv("REQUEST_RETRY"); v != "" {
+		// 仅当配置文件中重试次数为 0 时使用环境变量
+		if cfg.RequestRetry == 0 {
+			if retry, err := strconv.Atoi(v); err == nil && retry >= 0 {
+				cfg.RequestRetry = retry
+			}
+		}
+	}
+	if v := os.Getenv("MAX_RETRY_INTERVAL"); v != "" {
+		// 仅当配置文件中重试间隔为 0 时使用环境变量
+		if cfg.MaxRetryInterval == 0 {
+			if interval, err := strconv.Atoi(v); err == nil && interval >= 0 {
+				cfg.MaxRetryInterval = interval
+			}
+		}
+	}
+
+	// 功能开关配置 (运行时可调整)
+	if v := os.Getenv("DISABLE_COOLING"); v != "" {
+		cfg.DisableCooling = parseBool(v)
+	}
+
+	// 配额超限行为配置 (运行时可调整)
+	if v := os.Getenv("QUOTA_SWITCH_PROJECT"); v != "" {
+		cfg.QuotaExceeded.SwitchProject = parseBool(v)
+	}
+	if v := os.Getenv("QUOTA_SWITCH_PREVIEW_MODEL"); v != "" {
+		cfg.QuotaExceeded.SwitchPreviewModel = parseBool(v)
+	}
+
+	// Amp 集成配置 (运行时可调整)
+	if v := os.Getenv("AMP_UPSTREAM_URL"); v != "" {
+		if cfg.AmpCode.UpstreamURL == "" {
+			cfg.AmpCode.UpstreamURL = v
+		}
+	}
+	if v := os.Getenv("AMP_UPSTREAM_API_KEY"); v != "" {
+		if cfg.AmpCode.UpstreamAPIKey == "" {
+			cfg.AmpCode.UpstreamAPIKey = v
+		}
+	}
+	if v := os.Getenv("AMP_RESTRICT_MANAGEMENT_TO_LOCALHOST"); v != "" {
+		cfg.AmpCode.RestrictManagementToLocalhost = parseBool(v)
+	}
+	if v := os.Getenv("AMP_FORCE_MODEL_MAPPINGS"); v != "" {
+		cfg.AmpCode.ForceModelMappings = parseBool(v)
+	}
+}
+
+// parseBool 解析布尔值环境变量
+// 支持的 true 值: "true", "1", "yes", "on", "enabled"
+// 支持的 false 值: "false", "0", "no", "off", "disabled"
+// 其他值返回 false
+func parseBool(s string) bool {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "true", "1", "yes", "on", "enabled":
+		return true
+	case "false", "0", "no", "off", "disabled":
+		return false
+	default:
+		return false
+	}
 }
 
 // SaveConfigPreserveComments writes the config back to YAML while preserving existing comments

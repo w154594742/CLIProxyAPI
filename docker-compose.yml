@@ -10,19 +10,47 @@ services:
         COMMIT: ${COMMIT:-none}
         BUILD_DATE: ${BUILD_DATE:-unknown}
     container_name: cli-proxy-api
-    # env_file:
-    #   - .env
+
+    # 环境变量配置
+    # .env 文件会自动加载,无需显式指定 env_file
+    # 配置优先级: .env 环境变量 > config.yaml 文件
+    # 详见 .env.example 中的配置策略说明
+    env_file:
+      - .env
     environment:
+      # 云部署模式 (可选)
       DEPLOY: ${DEPLOY:-}
+      # 其他环境变量从 .env 文件自动加载:
+      # - 敏感配置 (🔒): SERVER_*, TLS_*, MANAGEMENT_*, AUTH_DIR, WS_AUTH
+      # - 运行时配置 (⚙️): DEBUG, LOGGING_TO_FILE, PROXY_URL, QUOTA_*, AMP_* 等
+
+    # 端口映射
+    # 默认主服务端口: 8317
+    # 其他端口用于多协议支持和管理功能
     ports:
-      - "8317:8317"
-      - "8085:8085"
-      - "1455:1455"
-      - "54545:54545"
-      - "51121:51121"
-      - "11451:11451"
+      - "${SERVER_PORT:-8317}:8317"  # 主服务端口 (可通过 .env 覆盖宿主机端口)
+      - "8085:8085"                   # 辅助端口
+      - "1455:1455"                   # 辅助端口
+      - "54545:54545"                 # 辅助端口
+      - "51121:51121"                 # 辅助端口
+      - "11451:11451"                 # 辅助端口
+
+    # 卷挂载配置
     volumes:
+      # 配置文件 (提供默认值,优先级低于环境变量)
       - ./config.yaml:/CLIProxyAPI/config.yaml
+      # OAuth 认证文件目录 (持久化)
       - ./auths:/root/.cli-proxy-api
+      # 日志目录 (持久化)
       - ./logs:/CLIProxyAPI/logs
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8317/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 重启策略
     restart: unless-stopped
