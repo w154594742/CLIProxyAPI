@@ -226,27 +226,274 @@ check_required_files() {
 
     # 创建必要的目录
     print_info "创建必要目录..."
-    mkdir -p auths logs
+    mkdir -p auths logs static
     print_success "目录结构已就绪"
+
+    # 检查静态文件
+    if [ -f "static/management.html" ]; then
+        print_success "management.html 静态文件已存在"
+    elif [ -f "static/management.html.placeholder" ]; then
+        print_warning "management.html 未预下载，将在运行时自动下载"
+        print_info "提示：您也可以手动下载 management.html 到 static 目录"
+    else
+        print_warning "static 目录为空，management.html 将在运行时自动下载"
+    fi
 
     echo ""
 }
 
-# 拉取 Docker 镜像
-pull_docker_image() {
-    print_step "拉取 Docker 镜像..."
+# 解析命令行参数
+BUILD_LOCAL=false
+PULL_ONLY=false
 
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --build-local)
+            BUILD_LOCAL=true
+            shift
+            ;;
+        --pull-only)
+            PULL_ONLY=true
+            shift
+            ;;
+        -h|--help)
+            cat << EOF
+CLIProxyAPI 部署辅助脚本
+
+用途: 快速部署 CLIProxyAPI 服务
+
+使用方法:
+  $0 [选项]
+
+选项:
+  -h, --help              显示此帮助信息
+  --build-local           强制使用本地源代码构建镜像
+  --pull-only             仅拉取远程镜像，不尝试本地构建
+
+EOF
+            exit 0
+            ;;
+        *)
+            print_error "未知选项: $1"
+            echo "使用 -h 或 --help 查看帮助信息"
+            exit 1
+            ;;
+    esac
+done
+
+# 构建或拉取 Docker 镜像
+pull_docker_image() {
+    print_step "准备 Docker 镜像..."
+
+    # 获取目标镜像名称
+    local IMAGE_NAME="${CLI_PROXY_IMAGE:-eceasy/cli-proxy-api:latest}"
+
+    # 首先检查本地是否已有镜像
+    if docker image inspect "$IMAGE_NAME" &> /dev/null; then
+        print_success "检测到本地镜像: $IMAGE_NAME"
+
+        # 检查镜像是否是通过本地构建的（有构建上下文信息）
+        local IMAGE_CREATED=$(docker image inspect "$IMAGE_NAME" --format='{{.Created}}' 2>/dev/null)
+        if [ -n "$IMAGE_CREATED" ]; then
+            print_info "本地镜像创建时间: $IMAGE_CREATED"
+        fi
+
+        echo ""
+        print_info "请选择镜像来源："
+        echo "  1) 使用本地现有镜像启动服务"
+        echo "  2) 重新构建本地镜像（如果有源代码）"
+        echo "  3) 拉取远程镜像"
+        echo ""
+        read -p "请输入选择 [1-3] [1]: " image_choice
+        image_choice=${image_choice:-1}
+
+        case $image_choice in
+            1)
+                print_info "将使用本地现有镜像启动服务"
+                echo ""
+                return 0
+                ;;
+            2)
+                print_info "选择重新构建本地镜像"
+                echo ""
+                # 检查是否有源代码
+                if ! check_source_code; then
+                    print_warning "未检测到源代码，无法构建本地镜像"
+                    print_info "将使用本地现有镜像启动服务"
+                    echo ""
+                    return 0
+                fi
+                if build_local_image; then
+                    return 0
+                else
+                    print_error "本地镜像构建失败，将使用本地现有镜像启动服务"
+                    echo ""
+                    return 0
+                fi
+                ;;
+            3)
+                print_info "选择拉取远程镜像"
+                pull_remote_image
+                return 0
+                ;;
+            *)
+                print_warning "无效选择，将使用本地现有镜像启动服务"
+                echo ""
+                return 0
+                ;;
+        esac
+    fi
+
+    # 检查是否强制拉取模式
+    if [ "$PULL_ONLY" = true ]; then
+        print_info "强制拉取远程镜像模式"
+        pull_remote_image
+        return 0
+    fi
+
+    # 如果强制本地构建模式
+    if [ "$BUILD_LOCAL" = true ]; then
+        print_info "强制本地构建模式，开始构建镜像..."
+        if ! check_source_code; then
+            print_error "强制本地构建模式，但未检测到源代码！"
+            print_info "请确保部署包包含源代码，或使用 --with-source 选项打包"
+            echo ""
+            exit 1
+        fi
+        if build_local_image; then
+            return 0
+        else
+            exit 1
+        fi
+    fi
+
+    # 没有本地镜像，检查源代码并询问
+    print_warning "本地没有找到镜像: $IMAGE_NAME"
+
+    if check_source_code; then
+        echo ""
+        print_info "检测到源代码，请选择镜像来源："
+        echo "  1) 使用本地源代码构建镜像"
+        echo "  2) 拉取远程镜像"
+        echo ""
+        read -p "请输入选择 [1-2] [1]: " source_choice
+        source_choice=${source_choice:-1}
+
+        case $source_choice in
+            1)
+                if build_local_image; then
+                    return 0
+                else
+                    print_error "本地镜像构建失败，尝试拉取远程镜像..."
+                    pull_remote_image
+                    return 0
+                fi
+                ;;
+            2)
+                pull_remote_image
+                return 0
+                ;;
+            *)
+                print_warning "无效选择，默认拉取远程镜像"
+                pull_remote_image
+                return 0
+                ;;
+        esac
+    else
+        # 没有源代码，直接拉取远程镜像
+        print_warning "未检测到源代码，将拉取远程镜像"
+        pull_remote_image
+    fi
+
+    echo ""
+}
+
+# 检查是否有源代码
+check_source_code() {
+    HAS_SOURCE=false
+
+    # 检测源代码目录和文件
+    if [ -d "cmd" ] && [ -d "internal" ] && [ -d "sdk" ]; then
+        HAS_SOURCE=true
+        print_info "检测到完整的源代码目录结构 (cmd, internal, sdk)"
+    elif [ -f "go.mod" ] && [ -f "Dockerfile" ]; then
+        HAS_SOURCE=true
+        print_info "检测到 Go 模块和 Dockerfile"
+    elif [ -f "cmd/server/main.go" ]; then
+        HAS_SOURCE=true
+        print_info "检测到主程序文件 (cmd/server/main.go)"
+    elif [ -f "main.go" ]; then
+        HAS_SOURCE=true
+        print_info "检测到主程序文件 (main.go)"
+    fi
+
+    return $([ "$HAS_SOURCE" = true ] && echo 0 || echo 1)
+}
+
+# 构建本地镜像
+build_local_image() {
+    print_step "使用本地源代码构建 Docker 镜像..."
+
+    # 从 config.yaml 读取代理设置
+    PROXY_URL=""
+    if [ -f config.yaml ]; then
+        PROXY_URL=$(grep "^proxy-url:" config.yaml | awk '{print $2}' | tr -d '"')
+    fi
+
+    # 如果找到代理配置，显示提示
+    if [ -n "$PROXY_URL" ]; then
+        print_info "检测到代理配置: $PROXY_URL"
+        # 导出环境变量供 docker-compose 使用
+        export PROXY_URL="$PROXY_URL"
+    else
+        print_warning "未检测到代理配置，如果网络受限可能导致构建失败"
+    fi
+
+    # 尝试使用 docker-compose build 或 docker compose build
+    if command -v docker-compose &> /dev/null; then
+        if docker-compose build --no-cache 2>/dev/null; then
+            print_success "本地镜像构建成功"
+            echo ""
+            return 0
+        else
+            print_error "本地镜像构建失败"
+            return 1
+        fi
+    else
+        if docker compose build --no-cache 2>/dev/null; then
+            print_success "本地镜像构建成功"
+            echo ""
+            return 0
+        else
+            print_error "本地镜像构建失败"
+            return 1
+        fi
+    fi
+}
+
+# 拉取远程镜像
+pull_remote_image() {
+    echo ""
     read -p "是否现在拉取最新镜像? (y/n) [y]: " pull_image
     pull_image=${pull_image:-y}
 
     if [[ "$pull_image" =~ ^[Yy]$ ]]; then
-        if docker-compose pull 2>/dev/null || docker compose pull 2>/dev/null; then
-            print_success "Docker 镜像拉取成功"
+        print_step "拉取远程 Docker 镜像..."
+        if command -v docker-compose &> /dev/null; then
+            if docker-compose pull 2>/dev/null; then
+                print_success "Docker 镜像拉取成功"
+            else
+                print_warning "镜像拉取失败,将在启动时自动拉取"
+            fi
         else
-            print_warning "镜像拉取失败,将在启动时自动拉取"
+            if docker compose pull 2>/dev/null; then
+                print_success "Docker 镜像拉取成功"
+            else
+                print_warning "镜像拉取失败,将在启动时自动拉取"
+            fi
         fi
     else
-        print_info "跳过镜像拉取,将使用本地镜像或在启动时拉取"
+        print_info "跳过镜像拉取,将在启动时自动拉取"
     fi
 
     echo ""
