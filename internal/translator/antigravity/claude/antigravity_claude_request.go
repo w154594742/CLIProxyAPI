@@ -13,6 +13,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/thinking"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/translator/gemini/common"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
+	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -301,8 +302,12 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	}
 
 	// tools
+	// 支持两种类型的工具：
+	// 1. 普通函数工具：包含 input_schema 的标准工具定义
+	// 2. 内置搜索工具：Claude 的 web_search_20250305 类型，映射为 Gemini 的 googleSearch
 	toolsJSON := ""
 	toolDeclCount := 0
+	hasWebSearch := false // 标记是否包含 Claude 内置 web_search 工具
 	allowedToolKeys := []string{"name", "description", "behavior", "parameters", "parametersJsonSchema", "response", "responseJsonSchema"}
 	toolsResult := gjson.GetBytes(rawJSON, "tools")
 	if toolsResult.IsArray() {
@@ -310,6 +315,17 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 		toolsResults := toolsResult.Array()
 		for i := 0; i < len(toolsResults); i++ {
 			toolResult := toolsResults[i]
+
+			// 检测 Claude 内置 web_search 工具
+			// Claude Code 发送的搜索工具格式为 {"type": "web_search_20250305", ...}
+			toolType := toolResult.Get("type").String()
+			if toolType == "web_search_20250305" || toolType == "web_search" {
+				hasWebSearch = true
+				log.Info("[ANTIGRAVITY-CLAUDE] 检测到 Claude web_search 工具，将映射为 googleSearch")
+				continue // 不作为普通函数工具处理
+			}
+
+			// 处理普通函数工具（需要有 input_schema）
 			inputSchemaResult := toolResult.Get("input_schema")
 			if inputSchemaResult.Exists() && inputSchemaResult.IsObject() {
 				// Sanitize the input schema for Antigravity API compatibility
@@ -326,6 +342,12 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 				toolDeclCount++
 			}
 		}
+
+		// 添加 googleSearch 工具（如果检测到 web_search）
+		if hasWebSearch {
+			toolsJSON, _ = sjson.SetRaw(toolsJSON, "0.googleSearch", `{}`)
+			log.Info("[ANTIGRAVITY-CLAUDE] 已添加 googleSearch 工具到请求")
+		}
 	}
 
 	// Build output Gemini CLI request JSON
@@ -333,7 +355,8 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	out, _ = sjson.Set(out, "model", modelName)
 
 	// Inject interleaved thinking hint when both tools and thinking are active
-	hasTools := toolDeclCount > 0
+	// hasTools 包括函数工具和 web_search 内置工具
+	hasTools := toolDeclCount > 0 || hasWebSearch
 	thinkingResult := gjson.GetBytes(rawJSON, "thinking")
 	hasThinking := thinkingResult.Exists() && thinkingResult.IsObject() && thinkingResult.Get("type").String() == "enabled"
 	isClaudeThinking := util.IsClaudeThinkingModel(modelName)
@@ -362,7 +385,8 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	if hasContents {
 		out, _ = sjson.SetRaw(out, "request.contents", contentsJSON)
 	}
-	if toolDeclCount > 0 {
+	// 有函数工具或 web_search 工具时，都需要输出 tools
+	if toolDeclCount > 0 || hasWebSearch {
 		out, _ = sjson.SetRaw(out, "request.tools", toolsJSON)
 	}
 

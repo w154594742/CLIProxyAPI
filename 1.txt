@@ -1,0 +1,114 @@
+==================================================
+阿里云服务器 CLIProxyAPI 容器谷歌账号授权清单
+生成时间: 2026-01-16 15:27:21
+==================================================
+
+【容器1: cli-proxy-api】
+----------------------------------------
+     1	3hardy3@gmail.com
+     2	abc5257@gmail.com
+     3	agimunimke75@gmail.com
+     4	ahmed08169624535@gmail.com
+     5	aishahusainiummee@gmail.com
+     6	aishamohamme16@gmail.com
+     7	anzomokarusevepi73941@gmail.com
+     8	baiy5477@gmail.com
+     9	beowgciizeyui3578@gmail.com
+    10	bomoniqu68752@gmail.com
+    11	ceinghong5@gmail.com
+    12	chen1casper@gmail.com
+    13	deadisturesurvival@gmail.com
+    14	dichihuneroan72617@gmail.com
+    15	dihuluniluveluke90221@gmail.com
+    16	diloratamo71903@gmail.com
+    17	dishihaqusejova54037@gmail.com
+    18	doronatukiku29613@gmail.com
+    19	e13510896662@gmail.com
+    20	fikigemaarjoho23083@gmail.com
+    21	finikatisa59573@gmail.com
+    22	fizofiti00516@gmail.com
+    23	fuyufei2004@gmail.com
+小计: 23 个账号
+
+【容器2: cli-proxy-api-2】
+----------------------------------------
+     1	haoyc777@gmail.com
+     2	haris_huang_1987@gmail.com
+     3	hasatusukaru43496@gmail.com
+     4	hixivezezo86432@gmail.com
+     5	hjvn3066@gmail.com
+     6	hokaxivezatepo36726@gmail.com
+     7	huakoh449@gmail.com
+     8	huleloloti44798@gmail.com
+     9	hunibokihake83682@gmail.com
+    10	ilokazigahi055@gmail.com
+    11	joloangotalu85862@gmail.com
+    12	josezemi10093@gmail.com
+    13	juhohukamilamolo59086@gmail.com
+    14	juliolen838@gmail.com
+    15	junlong14_chen@gmail.com
+    16	juyumepo35@gmail.com
+    17	kepisufiqa96573@gmail.com
+    18	kiditaqavinido16282@gmail.com
+    19	kilokalewanefi88233@gmail.com
+    20	kinesulogeve61190@gmail.com
+    21	kuiperssoultls973@gmail.com
+    22	kuseqamisemo69923@gmail.com
+    23	kylewong822@gmail.com
+小计: 23 个账号
+
+【容器3: cli-proxy-api-3】
+----------------------------------------
+     1	lamavigopigukize98295@gmail.com
+     2	lelujogeholo28427@gmail.com
+     3	likiarxifidohu47572@gmail.com
+     4	lilineanmoxi94805@gmail.com
+     5	lilinenicemari84311@gmail.com
+     6	linqingshan@gmail.com
+     7	lokiyadosanelugu34351@gmail.com
+     8	lonidolalune47320@gmail.com
+     9	loshidonihamapige33747@gmail.com
+    10	ludorujushi91924@gmail.com
+    11	lupohala86416@gmail.com
+    12	maarramepi35587@gmail.com
+    13	marabemihu65470@gmail.com
+    14	marufinariki10841@gmail.com
+    15	mechihaarrola75450@gmail.com
+    16	nishitulaqutalale45865@gmail.com
+    17	porumuhogefobe47813@gmail.com
+    18	qq598861413@gmail.com
+    19	qudonasu20525@gmail.com
+    20	quloeljusuju84622@gmail.com
+    21	qunatijulikese12706@gmail.com
+    22	rimamezokipopo65767@gmail.com
+小计: 22 个账号
+
+【容器4: cli-proxy-api-4】
+----------------------------------------
+     1	roguyawa02742@gmail.com
+     2	rubohumoan51244@gmail.com
+     3	s01022465763@gmail.com
+     4	sakurafan448@gmail.com
+     5	savikevalufo36352@gmail.com
+     6	seguinmaurice96@gmail.com
+     7	semukihitikaki59946@gmail.com
+     8	sloantan86@gmail.com
+     9	soulfarrell8@gmail.com
+    10	tehuzama43110@gmail.com
+    11	tekinear06602@gmail.com
+    12	tikuvemove75675@gmail.com
+    13	w154594742@gmail.com
+    14	wangxiaoke1996@gmail.com
+    15	wangzheuser123@gmail.com
+    16	wensi0206@gmail.com
+    17	wwb19821116@gmail.com
+    18	xiaohaiguai@gmail.com
+    19	zatexishitekifi32433@gmail.com
+    20	zazekidi90858@gmail.com
+    21	zelopokusu26086@gmail.com
+    22	zerivaru61173@gmail.com
+小计: 22 个账号
+
+==================================================
+总计: 90 个谷歌账号授权文件
+==================================================
