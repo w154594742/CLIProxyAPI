@@ -24,9 +24,12 @@ COPY --from=builder ./app/CLIProxyAPI /CLIProxyAPI/CLIProxyAPI
 
 COPY config.example.yaml /CLIProxyAPI/config.example.yaml
 
+# 创建静态文件目录用于存放管理面板资源
+RUN mkdir -p /CLIProxyAPI/static && chmod 755 /CLIProxyAPI/static
+
 WORKDIR /CLIProxyAPI
 
-EXPOSE 8317
+EXPOSE 8317 9011
 
 ENV TZ=Asia/Shanghai
 

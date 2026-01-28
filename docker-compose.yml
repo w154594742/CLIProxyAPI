@@ -15,6 +15,7 @@ services:
     environment:
       DEPLOY: ${DEPLOY:-}
     ports:
+      - "9011:9011"  # 主服务端口（与 config.yaml 中的 port 配置对应）
       - "8317:8317"
       - "8085:8085"
       - "1455:1455"
