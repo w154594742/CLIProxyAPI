@@ -224,16 +224,71 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 								functionResponseJSON, _ = sjson.Set(functionResponseJSON, "response.result", responseData)
 							} else if functionResponseResult.IsArray() {
 								frResults := functionResponseResult.Array()
-								if len(frResults) == 1 {
-									functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "response.result", frResults[0].Raw)
+								nonImageCount := 0
+								lastNonImageRaw := ""
+								filteredJSON := "[]"
+								imagePartsJSON := "[]"
+								for _, fr := range frResults {
+									if fr.Get("type").String() == "image" && fr.Get("source.type").String() == "base64" {
+										inlineDataJSON := `{}`
+										if mimeType := fr.Get("source.media_type").String(); mimeType != "" {
+											inlineDataJSON, _ = sjson.Set(inlineDataJSON, "mimeType", mimeType)
+										}
+										if data := fr.Get("source.data").String(); data != "" {
+											inlineDataJSON, _ = sjson.Set(inlineDataJSON, "data", data)
+										}
+
+										imagePartJSON := `{}`
+										imagePartJSON, _ = sjson.SetRaw(imagePartJSON, "inlineData", inlineDataJSON)
+										imagePartsJSON, _ = sjson.SetRaw(imagePartsJSON, "-1", imagePartJSON)
+										continue
+									}
+
+									nonImageCount++
+									lastNonImageRaw = fr.Raw
+									filteredJSON, _ = sjson.SetRaw(filteredJSON, "-1", fr.Raw)
+								}
+
+								if nonImageCount == 1 {
+									functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "response.result", lastNonImageRaw)
+								} else if nonImageCount > 1 {
+									functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "response.result", filteredJSON)
 								} else {
-									functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "response.result", functionResponseResult.Raw)
+									functionResponseJSON, _ = sjson.Set(functionResponseJSON, "response.result", "")
+								}
+
+								// Place image data inside functionResponse.parts as inlineData
+								// instead of as sibling parts in the outer content, to avoid
+								// base64 data bloating the text context.
+								if gjson.Get(imagePartsJSON, "#").Int() > 0 {
+									functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "parts", imagePartsJSON)
 								}
 
 							} else if functionResponseResult.IsObject() {
+								if functionResponseResult.Get("type").String() == "image" && functionResponseResult.Get("source.type").String() == "base64" {
+									inlineDataJSON := `{}`
+									if mimeType := functionResponseResult.Get("source.media_type").String(); mimeType != "" {
+										inlineDataJSON, _ = sjson.Set(inlineDataJSON, "mimeType", mimeType)
+									}
+									if data := functionResponseResult.Get("source.data").String(); data != "" {
+										inlineDataJSON, _ = sjson.Set(inlineDataJSON, "data", data)
+									}
+
+									imagePartJSON := `{}`
+									imagePartJSON, _ = sjson.SetRaw(imagePartJSON, "inlineData", inlineDataJSON)
+									imagePartsJSON := "[]"
+									imagePartsJSON, _ = sjson.SetRaw(imagePartsJSON, "-1", imagePartJSON)
+									functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "parts", imagePartsJSON)
+									functionResponseJSON, _ = sjson.Set(functionResponseJSON, "response.result", "")
+								} else {
+									functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "response.result", functionResponseResult.Raw)
+								}
+							} else if functionResponseResult.Raw != "" {
 								functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "response.result", functionResponseResult.Raw)
 							} else {
-								functionResponseJSON, _ = sjson.SetRaw(functionResponseJSON, "response.result", functionResponseResult.Raw)
+								// Content field is missing entirely — .Raw is empty which
+								// causes sjson.SetRaw to produce invalid JSON (e.g. "result":}).
+								functionResponseJSON, _ = sjson.Set(functionResponseJSON, "response.result", "")
 							}
 
 							partJSON := `{}`
@@ -245,7 +300,7 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 						if sourceResult.Get("type").String() == "base64" {
 							inlineDataJSON := `{}`
 							if mimeType := sourceResult.Get("media_type").String(); mimeType != "" {
-								inlineDataJSON, _ = sjson.Set(inlineDataJSON, "mime_type", mimeType)
+								inlineDataJSON, _ = sjson.Set(inlineDataJSON, "mimeType", mimeType)
 							}
 							if data := sourceResult.Get("data").String(); data != "" {
 								inlineDataJSON, _ = sjson.Set(inlineDataJSON, "data", data)
@@ -367,7 +422,8 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	// hasTools 包括函数工具和 web_search 内置工具
 	hasTools := toolDeclCount > 0 || hasWebSearch
 	thinkingResult := gjson.GetBytes(rawJSON, "thinking")
-	hasThinking := thinkingResult.Exists() && thinkingResult.IsObject() && thinkingResult.Get("type").String() == "enabled"
+	thinkingType := thinkingResult.Get("type").String()
+	hasThinking := thinkingResult.Exists() && thinkingResult.IsObject() && (thinkingType == "enabled" || thinkingType == "adaptive")
 	isClaudeThinking := util.IsClaudeThinkingModel(modelName)
 
 	if hasTools && hasThinking && isClaudeThinking {
@@ -401,12 +457,18 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 
 	// Map Anthropic thinking -> Gemini thinkingBudget/include_thoughts when type==enabled
 	if t := gjson.GetBytes(rawJSON, "thinking"); enableThoughtTranslate && t.Exists() && t.IsObject() {
-		if t.Get("type").String() == "enabled" {
+		switch t.Get("type").String() {
+		case "enabled":
 			if b := t.Get("budget_tokens"); b.Exists() && b.Type == gjson.Number {
 				budget := int(b.Int())
 				out, _ = sjson.Set(out, "request.generationConfig.thinkingConfig.thinkingBudget", budget)
 				out, _ = sjson.Set(out, "request.generationConfig.thinkingConfig.includeThoughts", true)
 			}
+		case "adaptive":
+			// Keep adaptive as a high level sentinel; ApplyThinking resolves it
+			// to model-specific max capability.
+			out, _ = sjson.Set(out, "request.generationConfig.thinkingConfig.thinkingLevel", "high")
+			out, _ = sjson.Set(out, "request.generationConfig.thinkingConfig.includeThoughts", true)
 		}
 	}
 	if v := gjson.GetBytes(rawJSON, "temperature"); v.Exists() && v.Type == gjson.Number {
