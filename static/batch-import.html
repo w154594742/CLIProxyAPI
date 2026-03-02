@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex 授权文件批量导入</title>
+<style>
+  :root {
+    --primary: #4f46e5;
+    --primary-hover: #4338ca;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --warning: #d97706;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-secondary: #64748b;
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.6; padding: 20px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 20px; }
+
+  /* 卡片 */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 0.875rem; font-weight: 600; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;
+  }
+
+  /* 表单行 */
+  .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 0.8125rem; color: var(--text-secondary); }
+  .form-group input {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 0.875rem; outline: none; transition: border-color 0.2s;
+  }
+  .form-group input:focus { border-color: var(--primary); }
+  .form-group.grow { flex: 1; min-width: 200px; }
+
+  /* 按钮 */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border: none; border-radius: 6px;
+    font-size: 0.875rem; font-weight: 500; cursor: pointer;
+    transition: background-color 0.2s, opacity 0.2s; white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:hover:not(:disabled) { background: #15803d; }
+  .btn-outline {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+  }
+  .btn-outline:hover:not(:disabled) { background: #f1f5f9; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: #b91c1c; }
+  .btn-sm { padding: 5px 10px; font-size: 0.8125rem; }
+
+  /* 状态点 */
+  .dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 6px;
+  }
+  .dot-green { background: var(--success); }
+  .dot-red { background: var(--danger); }
+  .dot-gray { background: #94a3b8; }
+
+  /* 统计栏 */
+  .stats-bar {
+    display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+    font-size: 0.875rem; color: var(--text-secondary);
+  }
+  .stats-bar strong { color: var(--text); }
+
+  /* 工具栏 */
+  .toolbar {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 10px; margin-bottom: 12px;
+  }
+  .toolbar-left, .toolbar-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* 表格 */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th {
+    background: #f8fafc; font-weight: 600; color: var(--text-secondary);
+    position: sticky; top: 0; z-index: 1;
+  }
+  tr:hover { background: #f8fafc; }
+  .text-mono { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.8125rem; }
+  .text-success { color: var(--success); }
+  .text-danger { color: var(--danger); }
+  .text-warning { color: var(--warning); }
+  .text-secondary { color: var(--text-secondary); }
+
+  /* 分页 */
+  .pagination {
+    display: flex; justify-content: center; align-items: center;
+    gap: 4px; margin-top: 16px;
+  }
+  .pagination button {
+    min-width: 36px; height: 36px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--card); cursor: pointer;
+    font-size: 0.875rem; transition: all 0.2s;
+  }
+  .pagination button:hover:not(:disabled):not(.active) { background: #f1f5f9; }
+  .pagination button.active {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+  }
+  .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* 进度条 */
+  .progress-wrap { margin-top: 12px; }
+  .progress-bar {
+    height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: var(--primary); border-radius: 4px;
+    transition: width 0.3s;
+  }
+  .progress-text {
+    display: flex; justify-content: space-between;
+    font-size: 0.8125rem; color: var(--text-secondary); margin-top: 6px;
+  }
+
+  /* 导入结果日志 */
+  .import-log {
+    max-height: 200px; overflow-y: auto; margin-top: 10px;
+    font-size: 0.8125rem; font-family: monospace;
+    background: #f1f5f9; border-radius: 6px; padding: 10px;
+  }
+  .import-log .log-err { color: var(--danger); }
+  .import-log .log-ok { color: var(--success); }
+
+  /* 隐藏原生文件选择器 */
+  #dirInput { display: none; }
+
+  /* 过滤器 */
+  .filter-input {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 0.8125rem; width: 220px; outline: none;
+  }
+  .filter-input:focus { border-color: var(--primary); }
+
+  /* 并发数 */
+  .concurrency-input {
+    width: 60px; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 0.8125rem; text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Codex 授权文件批量导入</h1>
+
+  <!-- API 连接配置 -->
+  <div class="card">
+    <div class="card-title">API 连接配置</div>
+    <div class="form-row">
+      <div class="form-group grow">
+        <label>API 地址</label>
+        <input type="text" id="apiBase" placeholder="http://localhost:8317" value="http://localhost:8317">
+      </div>
+      <div class="form-group grow">
+        <label>管理密钥</label>
+        <input type="password" id="apiKey" placeholder="输入 management secret key">
+      </div>
+      <button class="btn btn-outline" onclick="testConnection()">测试连接</button>
+      <span id="connStatus"></span>
+    </div>
+  </div>
+
+  <!-- 目录选择 -->
+  <div class="card">
+    <div class="card-title">选择授权文件目录</div>
+    <div class="form-row">
+      <button class="btn btn-primary" onclick="document.getElementById('dirInput').click()">加载本地目录</button>
+      <input type="file" id="dirInput" webkitdirectory multiple>
+      <span id="dirInfo" class="text-secondary" style="font-size:0.875rem;">未选择目录</span>
+    </div>
+    <div style="margin-top:8px; font-size:0.8125rem; color:var(--text-secondary);">
+      提示: 浏览器弹窗中的"上传"按钮仅表示将文件加载到页面中预览，并不会真正上传到服务器。请在下方列表中勾选文件后再点击"导入选中文件"按钮才会执行实际上传。
+    </div>
+  </div>
+
+  <!-- 文件列表 -->
+  <div class="card" id="fileListCard" style="display:none;">
+    <div class="card-title">文件列表</div>
+
+    <!-- 统计 -->
+    <div class="stats-bar" style="margin-bottom: 12px;">
+      <span>总文件数: <strong id="totalCount">0</strong></span>
+      <span>已过滤: <strong id="filteredCount">0</strong></span>
+      <span>已选中: <strong id="selectedCount">0</strong></span>
+      <span>当前页: <strong id="currentPageInfo">-</strong></span>
+    </div>
+
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input type="text" class="filter-input" id="filterInput" placeholder="按文件名/邮箱筛选...">
+        <button class="btn btn-outline btn-sm" onclick="selectPage(true)">全选本页</button>
+        <button class="btn btn-outline btn-sm" onclick="selectPage(false)">取消本页</button>
+        <button class="btn btn-outline btn-sm" onclick="selectAll(true)">全选所有</button>
+        <button class="btn btn-outline btn-sm" onclick="selectAll(false)">取消所有</button>
+      </div>
+      <div class="toolbar-right">
+        <label style="font-size:0.8125rem; color:var(--text-secondary);">每页:</label>
+        <select class="concurrency-input" id="pageSizeSelect" onchange="changePageSize()" style="width:75px;">
+          <option value="100">100</option>
+          <option value="200">200</option>
+          <option value="500">500</option>
+          <option value="1000" selected>1000</option>
+          <option value="2000">2000</option>
+          <option value="3000">3000</option>
+          <option value="5000">5000</option>
+          <option value="10000">10000</option>
+        </select>
+        <label style="font-size:0.8125rem; color:var(--text-secondary);">并发数:</label>
+        <input type="number" class="concurrency-input" id="concurrency" value="5" min="1" max="20">
+        <button class="btn btn-success" id="importBtn" onclick="startImport()" disabled>
+          导入选中文件
+        </button>
+      </div>
+    </div>
+
+    <!-- 导入进度（放在表格上方，确保可见） -->
+    <div class="progress-wrap" id="progressWrap" style="display:none;">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text">
+        <span id="progressLabel">准备中...</span>
+        <span id="progressPercent">0%</span>
+      </div>
+      <div class="import-log" id="importLog"></div>
+    </div>
+
+    <!-- 表格 -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px;"><input type="checkbox" id="thCheckbox" onchange="selectPage(this.checked)"></th>
+            <th>文件名</th>
+            <th>邮箱</th>
+            <th>类型</th>
+            <th>过期时间</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- 分页 -->
+    <div class="pagination" id="pagination"></div>
+
+  </div>
+</div>
+
+<script>
+// ========== 全局状态 ==========
+const state = {
+  allFiles: [],       // 所有 File 对象（经 .json 过滤）
+  filtered: [],       // 当前过滤后的列表
+  selected: new Set(),// 选中文件的索引（基于 allFiles）
+  page: 1,
+  pageSize: 1000,
+  importing: false,
+  aborted: false
+};
+
+// ========== API 配置（自动持久化到 localStorage） ==========
+const STORAGE_KEY_API = 'batch_import_api_base';
+const STORAGE_KEY_SECRET = 'batch_import_api_key';
+
+// 页面加载时恢复保存的配置
+(function restoreConfig() {
+  const savedBase = localStorage.getItem(STORAGE_KEY_API);
+  const savedKey = localStorage.getItem(STORAGE_KEY_SECRET);
+  if (savedBase) document.getElementById('apiBase').value = savedBase;
+  if (savedKey) document.getElementById('apiKey').value = savedKey;
+})();
+
+// 输入变更时自动保存
+document.getElementById('apiBase').addEventListener('input', function() {
+  localStorage.setItem(STORAGE_KEY_API, this.value.trim());
+});
+document.getElementById('apiKey').addEventListener('input', function() {
+  localStorage.setItem(STORAGE_KEY_SECRET, this.value.trim());
+});
+
+function getApiBase() {
+  return document.getElementById('apiBase').value.replace(/\/+$/, '');
+}
+function getHeaders() {
+  const key = document.getElementById('apiKey').value.trim();
+  const h = {};
+  if (key) h['Authorization'] = 'Bearer ' + key;
+  return h;
+}
+
+// 测试连接：调用 GET /v0/management/auth-files 验证
+async function testConnection() {
+  const el = document.getElementById('connStatus');
+  el.innerHTML = '<span class="dot dot-gray"></span>测试中...';
+  try {
+    const resp = await fetch(getApiBase() + '/v0/management/auth-files', { headers: getHeaders() });
+    if (resp.ok) {
+      const data = await resp.json();
+      const count = data.files ? data.files.length : 0;
+      el.innerHTML = '<span class="dot dot-green"></span>连接成功，当前已有 ' + count + ' 个授权文件';
+    } else {
+      const text = await resp.text();
+      el.innerHTML = '<span class="dot dot-red"></span>失败: HTTP ' + resp.status + ' ' + text.substring(0, 100);
+    }
+  } catch (e) {
+    el.innerHTML = '<span class="dot dot-red"></span>连接失败: ' + e.message;
+  }
+}
+
+// ========== 目录选择 ==========
+document.getElementById('dirInput').addEventListener('change', function(e) {
+  const files = Array.from(e.target.files);
+  // 仅保留 .json 文件
+  state.allFiles = files.filter(f => f.name.toLowerCase().endsWith('.json'));
+  state.allFiles.sort((a, b) => a.name.localeCompare(b.name));
+  state.selected.clear();
+  state.page = 1;
+
+  const dirPath = files.length > 0 ? files[0].webkitRelativePath.split('/')[0] : '未知';
+  document.getElementById('dirInfo').textContent =
+    '目录: ' + dirPath + ' | 共 ' + files.length + ' 个文件，其中 ' + state.allFiles.length + ' 个 JSON 文件';
+
+  applyFilter();
+  document.getElementById('fileListCard').style.display = 'block';
+});
+
+// ========== 过滤 ==========
+document.getElementById('filterInput').addEventListener('input', function() {
+  state.page = 1;
+  applyFilter();
+});
+
+function applyFilter() {
+  const keyword = document.getElementById('filterInput').value.trim().toLowerCase();
+  if (!keyword) {
+    state.filtered = state.allFiles.map((f, i) => ({ file: f, idx: i }));
+  } else {
+    state.filtered = [];
+    for (let i = 0; i < state.allFiles.length; i++) {
+      if (state.allFiles[i].name.toLowerCase().includes(keyword)) {
+        state.filtered.push({ file: state.allFiles[i], idx: i });
+      }
+    }
+  }
+  updateStats();
+  renderTable();
+  renderPagination();
+}
+
+// ========== 从文件名解析信息 ==========
+// 文件名格式: codex_{id}_{email}_{timestamp}.json
+function parseFileName(name) {
+  const base = name.replace(/\.json$/i, '');
+  const parts = base.split('_');
+  // 至少 codex + id + email_part + timestamp
+  let email = '-', type = '-';
+  if (parts.length >= 2) type = parts[0];
+  if (parts.length >= 4) {
+    // email 是倒数第二段，timestamp 是最后一段
+    const ts = parts[parts.length - 1];
+    // email 可能包含下划线（被 split 拆开了），需要合并中间部分
+    email = parts.slice(2, parts.length - 1).join('_');
+  } else if (parts.length === 3) {
+    email = parts[2];
+  }
+  return { email, type };
+}
+
+// ========== 按需读取文件的过期时间 ==========
+const expiryCache = new Map();
+
+async function readExpiry(file) {
+  if (expiryCache.has(file.name)) return expiryCache.get(file.name);
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    const result = {
+      expired: json.expired || json.expiry || '-',
+      status: 'unknown'
+    };
+    if (result.expired && result.expired !== '-') {
+      const expDate = new Date(result.expired);
+      result.status = expDate > new Date() ? 'valid' : 'expired';
+    }
+    expiryCache.set(file.name, result);
+    return result;
+  } catch {
+    const result = { expired: '解析失败', status: 'error' };
+    expiryCache.set(file.name, result);
+    return result;
+  }
+}
+
+// ========== 渲染表格 ==========
+function renderTable() {
+  const tbody = document.getElementById('tbody');
+  const start = (state.page - 1) * state.pageSize;
+  const end = Math.min(start + state.pageSize, state.filtered.length);
+  const pageItems = state.filtered.slice(start, end);
+
+  if (pageItems.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-secondary); padding:40px;">无匹配文件</td></tr>';
+    return;
+  }
+
+  let html = '';
+  for (const item of pageItems) {
+    const { email, type } = parseFileName(item.file.name);
+    const checked = state.selected.has(item.idx) ? 'checked' : '';
+    html += '<tr>' +
+      '<td><input type="checkbox" data-idx="' + item.idx + '" ' + checked + ' onchange="toggleSelect(' + item.idx + ', this.checked)"></td>' +
+      '<td class="text-mono">' + escapeHtml(item.file.name) + '</td>' +
+      '<td>' + escapeHtml(email) + '</td>' +
+      '<td>' + escapeHtml(type) + '</td>' +
+      '<td class="expiry-cell" data-file-idx="' + item.idx + '">...</td>' +
+      '<td class="status-cell" data-file-idx="' + item.idx + '">-</td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+
+  // 异步加载过期时间（当前页）
+  loadExpiries(pageItems);
+}
+
+async function loadExpiries(pageItems) {
+  // 分批读取，避免同时读取过多文件
+  const batchSize = 50;
+  for (let i = 0; i < pageItems.length; i += batchSize) {
+    const batch = pageItems.slice(i, i + batchSize);
+    await Promise.all(batch.map(async (item) => {
+      const info = await readExpiry(item.file);
+      const expCell = document.querySelector('.expiry-cell[data-file-idx="' + item.idx + '"]');
+      const statusCell = document.querySelector('.status-cell[data-file-idx="' + item.idx + '"]');
+      if (expCell) {
+        expCell.textContent = info.expired;
+        if (info.status === 'expired') expCell.classList.add('text-danger');
+      }
+      if (statusCell) {
+        if (info.status === 'valid') {
+          statusCell.innerHTML = '<span class="text-success">有效</span>';
+        } else if (info.status === 'expired') {
+          statusCell.innerHTML = '<span class="text-danger">已过期</span>';
+        } else if (info.status === 'error') {
+          statusCell.innerHTML = '<span class="text-warning">解析失败</span>';
+        } else {
+          statusCell.textContent = '-';
+        }
+      }
+    }));
+  }
+}
+
+// ========== 分页 ==========
+function renderPagination() {
+  const total = state.filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+  if (state.page > totalPages) state.page = totalPages;
+
+  document.getElementById('currentPageInfo').textContent = state.page + ' / ' + totalPages;
+
+  const el = document.getElementById('pagination');
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  let html = '';
+  html += '<button ' + (state.page <= 1 ? 'disabled' : '') + ' onclick="goPage(' + (state.page - 1) + ')">&#8249;</button>';
+
+  // 显示页码（最多显示 10 个按钮）
+  const maxButtons = 10;
+  let startPage = Math.max(1, state.page - Math.floor(maxButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+  if (endPage - startPage < maxButtons - 1) startPage = Math.max(1, endPage - maxButtons + 1);
+
+  if (startPage > 1) html += '<button onclick="goPage(1)">1</button><button disabled>...</button>';
+  for (let p = startPage; p <= endPage; p++) {
+    html += '<button class="' + (p === state.page ? 'active' : '') + '" onclick="goPage(' + p + ')">' + p + '</button>';
+  }
+  if (endPage < totalPages) html += '<button disabled>...</button><button onclick="goPage(' + totalPages + ')">' + totalPages + '</button>';
+
+  html += '<button ' + (state.page >= totalPages ? 'disabled' : '') + ' onclick="goPage(' + (state.page + 1) + ')">&#8250;</button>';
+  el.innerHTML = html;
+}
+
+function changePageSize() {
+  state.pageSize = parseInt(document.getElementById('pageSizeSelect').value) || 1000;
+  state.page = 1;
+  renderTable();
+  renderPagination();
+  updateStats();
+  syncHeaderCheckbox();
+}
+
+function goPage(p) {
+  state.page = p;
+  renderTable();
+  renderPagination();
+  updateStats();
+  // 同步表头 checkbox 状态
+  syncHeaderCheckbox();
+}
+
+// ========== 选择操作 ==========
+function toggleSelect(idx, checked) {
+  if (checked) state.selected.add(idx); else state.selected.delete(idx);
+  updateStats();
+  syncHeaderCheckbox();
+}
+
+function selectPage(checked) {
+  const start = (state.page - 1) * state.pageSize;
+  const end = Math.min(start + state.pageSize, state.filtered.length);
+  for (let i = start; i < end; i++) {
+    const idx = state.filtered[i].idx;
+    if (checked) state.selected.add(idx); else state.selected.delete(idx);
+  }
+  renderTable();
+  updateStats();
+  syncHeaderCheckbox();
+}
+
+function selectAll(checked) {
+  if (checked) {
+    for (const item of state.filtered) state.selected.add(item.idx);
+  } else {
+    // 仅取消过滤结果中的选中
+    for (const item of state.filtered) state.selected.delete(item.idx);
+  }
+  renderTable();
+  updateStats();
+  syncHeaderCheckbox();
+}
+
+function syncHeaderCheckbox() {
+  const start = (state.page - 1) * state.pageSize;
+  const end = Math.min(start + state.pageSize, state.filtered.length);
+  let allChecked = end > start;
+  for (let i = start; i < end; i++) {
+    if (!state.selected.has(state.filtered[i].idx)) { allChecked = false; break; }
+  }
+  document.getElementById('thCheckbox').checked = allChecked;
+}
+
+function updateStats() {
+  document.getElementById('totalCount').textContent = state.allFiles.length;
+  document.getElementById('filteredCount').textContent = state.filtered.length;
+  document.getElementById('selectedCount').textContent = state.selected.size;
+  document.getElementById('importBtn').disabled = state.selected.size === 0 || state.importing;
+}
+
+// ========== 批量导入 ==========
+async function startImport() {
+  if (state.selected.size === 0 || state.importing) return;
+  state.importing = true;
+  state.aborted = false;
+  const concurrency = Math.max(1, Math.min(20, parseInt(document.getElementById('concurrency').value) || 5));
+
+  document.getElementById('importBtn').disabled = true;
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('progressWrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const logEl = document.getElementById('importLog');
+  logEl.innerHTML = '';
+
+  const indices = Array.from(state.selected);
+  const total = indices.length;
+  let done = 0, success = 0, fail = 0;
+
+  updateProgress(0, total, 0, 0);
+  appendLog('开始导入 ' + total + ' 个文件，并发数: ' + concurrency, 'log-ok');
+
+  // 并发控制
+  const queue = [...indices];
+  const workers = [];
+  for (let w = 0; w < concurrency; w++) {
+    workers.push((async () => {
+      while (queue.length > 0 && !state.aborted) {
+        const idx = queue.shift();
+        if (idx === undefined) break;
+        const file = state.allFiles[idx];
+        try {
+          const formData = new FormData();
+          formData.append('file', file, file.name);
+          const resp = await fetch(getApiBase() + '/v0/management/auth-files', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: formData
+          });
+          if (resp.ok) {
+            success++;
+          } else {
+            fail++;
+            const text = await resp.text();
+            appendLog('[失败] ' + file.name + ': HTTP ' + resp.status + ' ' + text.substring(0, 80), 'log-err');
+          }
+        } catch (e) {
+          fail++;
+          appendLog('[异常] ' + file.name + ': ' + e.message, 'log-err');
+        }
+        done++;
+        updateProgress(done, total, success, fail);
+      }
+    })());
+  }
+
+  await Promise.all(workers);
+  state.importing = false;
+
+  const msg = '导入完成: 共 ' + total + ' 个，成功 ' + success + '，失败 ' + fail;
+  appendLog(msg, fail > 0 ? 'log-err' : 'log-ok');
+  document.getElementById('importBtn').disabled = state.selected.size === 0;
+  alert(msg);
+}
+
+function updateProgress(done, total, success, fail) {
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPercent').textContent = pct + '%';
+  document.getElementById('progressLabel').textContent =
+    '已处理 ' + done + '/' + total + ' (成功: ' + success + ', 失败: ' + fail + ')';
+}
+
+function appendLog(msg, cls) {
+  const el = document.getElementById('importLog');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ========== 工具函数 ==========
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ========== 刷新/关闭页面拦截 ==========
+window.addEventListener('beforeunload', function(e) {
+  if (state.allFiles.length > 0 || state.importing) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+</script>
+</body>
+</html>
