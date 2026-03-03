@@ -231,6 +231,9 @@
         </select>
         <label style="font-size:0.8125rem; color:var(--text-secondary);">并发数:</label>
         <input type="number" class="concurrency-input" id="concurrency" value="5" min="1" max="20">
+        <button class="btn btn-outline" id="copyRefreshTokenBtn" onclick="copySelectedRefreshTokens()" disabled>
+          复制Refresh Token
+        </button>
         <button class="btn btn-success" id="importBtn" onclick="startImport()" disabled>
           导入选中文件
         </button>
@@ -568,6 +571,109 @@ function updateStats() {
   document.getElementById('filteredCount').textContent = state.filtered.length;
   document.getElementById('selectedCount').textContent = state.selected.size;
   document.getElementById('importBtn').disabled = state.selected.size === 0 || state.importing;
+
+  const copyBtn = document.getElementById('copyRefreshTokenBtn');
+  if (copyBtn) {
+    copyBtn.disabled = state.selected.size === 0 || state.importing;
+  }
+}
+
+// ========== 复制 Refresh Token ==========
+/**
+ * 将文本复制到系统剪贴板
+ * 说明：
+ * 1. 优先使用 navigator.clipboard（现代浏览器）
+ * 2. 不可用时自动降级到 textarea + execCommand('copy')
+ */
+async function writeClipboardText(text) {
+  // 空文本直接返回，避免无意义复制操作
+  if (!text) return false;
+
+  // 现代浏览器复制方案（通常要求 HTTPS 或 localhost）
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  // 降级复制方案，兼容较旧浏览器
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+  return copied;
+}
+
+/**
+ * 批量复制选中文件中的 refresh_token（每行一个）
+ * 规则：
+ * - 仅读取 JSON 根字段 refresh_token
+ * - 无选中或无可复制值时，提示固定文案
+ */
+async function copySelectedRefreshTokens() {
+  // 无选中或正在导入时，不执行复制
+  if (state.selected.size === 0 || state.importing) {
+    alert('未找到可复制的 Refresh Token');
+    return;
+  }
+
+  const copyBtn = document.getElementById('copyRefreshTokenBtn');
+  if (copyBtn) copyBtn.disabled = true;
+
+  try {
+    const tokens = [];
+    const selectedIndices = Array.from(state.selected);
+
+    // 逐个读取选中文件，避免一次性加载过多内容
+    for (const idx of selectedIndices) {
+      const file = state.allFiles[idx];
+      if (!file) continue;
+
+      try {
+        const content = await file.text();
+        const data = JSON.parse(content);
+
+        // 按需求仅读取 refresh_token 字段
+        if (data && typeof data.refresh_token === 'string') {
+          const token = data.refresh_token.trim();
+          if (token) tokens.push(token);
+        }
+      } catch (e) {
+        // 单文件异常不影响整体流程
+        appendLog('[跳过] ' + file.name + ': 解析失败，无法提取 refresh_token', 'log-err');
+      }
+    }
+
+    if (tokens.length === 0) {
+      alert('未找到可复制的 Refresh Token');
+      return;
+    }
+
+    // 每行一个 token
+    const payload = tokens.join('\n');
+    const ok = await writeClipboardText(payload);
+    if (!ok) {
+      alert('复制失败，请检查浏览器权限');
+      return;
+    }
+
+    alert('已复制 ' + tokens.length + ' 条 Refresh Token');
+  } catch (e) {
+    alert('复制失败，请检查浏览器权限');
+  } finally {
+    // 统一由 updateStats 恢复按钮状态
+    updateStats();
+  }
 }
 
 // ========== 批量导入 ==========
@@ -577,7 +683,7 @@ async function startImport() {
   state.aborted = false;
   const concurrency = Math.max(1, Math.min(20, parseInt(document.getElementById('concurrency').value) || 5));
 
-  document.getElementById('importBtn').disabled = true;
+  updateStats();
   document.getElementById('progressWrap').style.display = 'block';
   document.getElementById('progressWrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   const logEl = document.getElementById('importLog');
@@ -629,7 +735,7 @@ async function startImport() {
 
   const msg = '导入完成: 共 ' + total + ' 个，成功 ' + success + '，失败 ' + fail;
   appendLog(msg, fail > 0 ? 'log-err' : 'log-ok');
-  document.getElementById('importBtn').disabled = state.selected.size === 0;
+  updateStats();
   alert(msg);
 }
 
