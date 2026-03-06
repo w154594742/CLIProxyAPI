@@ -35,20 +35,26 @@ import (
 )
 
 var (
-	// 这些变量通过 -ldflags 在构建时注入
-	// 不再直接使用，而是传递给 buildinfo 包
-	versionBase       = "dev"      // 注入上游版本号
-	commitHash        = "unknown"  // 注入短提交哈希
-	commitFull        = "none"     // 注入完整提交哈希
-	buildDate         = "unknown"  // 注入构建时间
+	Version           = "dev"
+	Commit            = "none"
+	CommitHash        = "unknown"  // 短提交哈希，用于版本号显示
+	BuildDate         = "unknown"
 	DefaultConfigPath = ""
 )
 
 // init initializes the shared logger setup.
 func init() {
 	logging.SetupBaseLogger()
-	// 传递构建信息到 buildinfo 包
-	buildinfo.SetBuildInfo(versionBase, commitHash, commitFull, buildDate)
+
+	// 组合版本号：如果有提交哈希，追加到版本号后面
+	if CommitHash != "unknown" && CommitHash != "" {
+		buildinfo.Version = Version + "-" + CommitHash
+	} else {
+		buildinfo.Version = Version
+	}
+
+	buildinfo.Commit = Commit
+	buildinfo.BuildDate = BuildDate
 }
 
 // main is the entry point of the application.
