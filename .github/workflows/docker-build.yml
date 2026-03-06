@@ -19,6 +19,56 @@ jobs:
       # 检出代码
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史以便检测版本
+
+      # 检测上游版本号
+      - name: Detect upstream version
+        id: version
+        run: |
+          # 1. 优先从 version.go 读取
+          if [[ -f "internal/buildinfo/version.go" ]]; then
+            VERSION=$(grep 'UpstreamVersion = ' internal/buildinfo/version.go 2>/dev/null | sed 's/.*"\(.*\)".*/\1/')
+            if [[ -n "$VERSION" && "$VERSION" != "v0.0.0" ]]; then
+              echo "upstream_version=${VERSION}" >> $GITHUB_OUTPUT
+              echo "Detected version from version.go: ${VERSION}"
+              exit 0
+            fi
+          fi
+
+          # 2. 从 Git 历史自动检测
+          MERGE_COMMIT=$(git log --grep="Merge origin/main" --format="%H" -1 2>/dev/null || echo "")
+          if [[ -n "$MERGE_COMMIT" ]]; then
+            # 尝试从合并提交消息中提取版本号
+            VERSION=$(git log ${MERGE_COMMIT} --format="%s" -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
+            if [[ -n "$VERSION" ]]; then
+              echo "upstream_version=${VERSION}" >> $GITHUB_OUTPUT
+              echo "Detected version from merge commit: ${VERSION}"
+              exit 0
+            fi
+
+            # 尝试从上游提交中提取
+            UPSTREAM_COMMIT=$(git rev-parse ${MERGE_COMMIT}^2 2>/dev/null || echo "")
+            if [[ -n "$UPSTREAM_COMMIT" ]]; then
+              VERSION=$(git log ${UPSTREAM_COMMIT} --format="%s" -5 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
+              if [[ -n "$VERSION" ]]; then
+                echo "upstream_version=${VERSION}" >> $GITHUB_OUTPUT
+                echo "Detected version from upstream commit: ${VERSION}"
+                exit 0
+              fi
+            fi
+          fi
+
+          # 3. 使用默认版本
+          echo "upstream_version=v6.0.0" >> $GITHUB_OUTPUT
+          echo "Using default version: v6.0.0"
+
+      # 准备构建信息
+      - name: Prepare build info
+        id: build_info
+        run: |
+          echo "commit_short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+          echo "build_date=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
 
       # 设置 QEMU（用于多架构构建）
       - name: Set up QEMU
@@ -62,8 +112,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ steps.version.outputs.upstream_version }}
             COMMIT=${{ github.sha }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            COMMIT_SHORT=${{ steps.build_info.outputs.commit_short }}
+            BUILD_DATE=${{ steps.build_info.outputs.build_date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
