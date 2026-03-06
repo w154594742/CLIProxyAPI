@@ -60,6 +60,47 @@ GLM CODING PLAN 是专为AI编码打造的订阅套餐，每月最低仅需20元
 
 CLIProxyAPI 用户手册： [https://help.router-for.me/](https://help.router-for.me/cn/)
 
+## Docker 部署
+
+### 使用预构建镜像
+
+项目提供多架构 Docker 镜像（支持 amd64 和 arm64），托管在 GitHub Container Registry：
+
+```bash
+# 拉取最新镜像
+docker pull ghcr.io/w154594742/cliproxyapi:latest
+
+# 使用 docker-compose 启动
+docker-compose up -d
+```
+
+### 镜像标签说明
+
+- `latest` - 最新稳定版本
+- `v1.2.3` - 特定版本号
+- `sha-abc1234` - 特定 commit 构建
+
+### 自动构建
+
+当在 `wqp-dev` 分支推送 tag 时，GitHub Actions 会自动构建并推送多架构镜像：
+
+```bash
+# 创建并推送 tag
+git tag v1.0.0
+git push origin v1.0.0
+
+# 等待 GitHub Actions 完成构建
+# 镜像将自动推送到 ghcr.io/w154594742/cliproxyapi
+```
+
+### 自定义镜像地址
+
+可通过环境变量覆盖默认镜像：
+
+```bash
+CLI_PROXY_IMAGE=ghcr.io/w154594742/cliproxyapi:v1.0.0 docker-compose up -d
+```
+
 ## 管理 API 文档
 
 请参见 [MANAGEMENT_API_CN.md](https://help.router-for.me/cn/management/api)
